@@ -127,7 +127,7 @@ st.markdown("""
         }
     }
     
-    /* ========== ESTILOS GERAIS (mantidos) ========== */
+    /* ========== ESTILOS GERAIS ========== */
      /* Header - Fundo */
     header[data-testid="stHeader"] {
         background-color: #ffffff !important;
@@ -152,7 +152,7 @@ st.markdown("""
     
     /* Menu hambúrguer e outros elementos do header */
     header[data-testid="stHeader"] button {
-        color: #000000 !important;
+        color: #ffffff !important;
     }
     
     /* Forçar todo o container superior */
