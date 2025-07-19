@@ -49,7 +49,7 @@ query = """
     dados.V2009 AS idade,
     dados.V3009A AS escolaridade
 FROM `basedosdados.br_ibge_pnadc.microdados` AS dados
-WHERE (dados.ano = 2024 AND dados.VD4019 > 0 AND dados.V2010 <> '9')
+WHERE (dados.ano = 2024 AND dados.VD4019 > 0 AND dados.V2010 <> '9' AND dados.V3009A <> 'None')
 """
 
 pnadc_vd4019 = bd.read_sql(query=query, billing_project_id=billing_id)
@@ -62,20 +62,19 @@ pnadc_vd4019 = bd.read_sql(query=query, billing_project_id=billing_id)
 
 escolaridade = pd.DataFrame(
     {
-        'escolaridade': ['None', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'],
-        'tipo_escolaridade': ['NA',
-                              'Pré-escola',
-                              'Classe de alfabetização - CA',
-                              'Alfabetização de jovens e adultos',
-                              'Antigo primário (elementar)',
-                              'Antigo ginásio (médio 1º ciclo)',
-                              'Regular do ensino fundamental ou do 1º grau',
-                              'EJA ou supletivo do 1º grau',
-                              'Antigo científico/clássico (médio 2º ciclo)',
-                              'Regular do ensino médio ou do 2º grau',
-                              'EJA ou supletivo do 2º grau',
-                              'Superior - graduação',
-                              'Especialização de nível superior',
+        'escolaridade': ['2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'],
+        'tipo_escolaridade': ['Pré-escola',
+                              'Alfabetizado',
+                              'Alfabetizado',
+                              'Fundamental',
+                              'Fundamental',
+                              'Fundamental',
+                              'Fundamental',
+                              'Médio',
+                              'Médio',
+                              'Médio',
+                              'Superior',
+                              'Pós-graduação',
                               'Mestrado',
                               'Doutorado']
     }
