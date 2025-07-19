@@ -1,0 +1,8 @@
+sidrapy==0.1.4
+pandas==2.2.3
+basedosdados>=1.6.0
+streamlit>=1.28.0
+plotly>=5.15.0
+numpy>=1.24.0
+pyyaml>=6.0
+pathlib2>=2.3.7
