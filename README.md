@@ -10,8 +10,8 @@ A aplicação foi desenvolvida em **Python** utilizando **Streamlit** e **Stream
 
 ## Sobre os dados
 
-- **Fonte**: Pesquisa Nacional por Amostra de Domicílios Contínua (PNAD-C) — IBGE  
-- **Variável principal**: `VD4019` — Rendimento mensal habitual de todos os trabalhos para pessoas de 14 anos ou mais  
+- **Fonte**: Pesquisa Nacional por Amostra de Domicílios Contínua (PNAD-C) — IBGE
+- **Variável principal**: `VD4019` — Rendimento mensal habitual de todos os trabalhos para pessoas de 14 anos ou mais
 - **Variáveis de segmentação**: sexo, grau de instrução, cor/raça e unidade da federação (UF)
 
 ---
@@ -29,7 +29,7 @@ A aplicação foi desenvolvida em **Python** utilizando **Streamlit** e **Stream
 
 - streamlit
 - basedosdados
-- pandas  
+- pandas
 - plotly
 - yaml
 - logging
@@ -38,21 +38,53 @@ A aplicação foi desenvolvida em **Python** utilizando **Streamlit** e **Stream
 
 ## Como executar localmente
 
-### 1. Clone o repositório
+### Com Docker
 
-git clone https://github.com/tempxrin/seu-salario-realidade-brasileira.git  
+#### Construa a Imagem
+
+```bash
+docker build -t salario-br .
+```
+
+#### Execute a Imagem
+
+```bash
+docker run -p 8501:8501 salario-br
+```
+
+### Manualmente
+
+#### 1. Clone o repositório
+
+```bash
+git clone https://github.com/tempxrin/seu-salario-realidade-brasileira.git
 cd seu-salario-realidade-brasileira
+```
 
-### 2. Crie e ative um ambiente virtual
+#### 2. Crie e ative um ambiente virtual
 
-python -m venv venv  
-source venv/bin/activate  # Linux/Mac  
-venv\Scripts\activate     # Windows
+##### Linux ou Mac
 
-### 3. Instale as dependências
+```bash
+python -m venv venv
+source venv/bin/activate
+```
 
+###### Windows
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+#### 3. Instale as dependências
+
+```bash
 pip install -r requirements.txt
+```
 
-### 4. Execute a aplicação
+#### 4. Execute a aplicação
 
+```bash
 streamlit run app.py
+```
