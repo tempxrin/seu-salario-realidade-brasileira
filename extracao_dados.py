@@ -94,10 +94,33 @@ sexo = pd.DataFrame(
     }
 )
 
+def categorizar_idade(idade):
+    """Categoriza idade em faixas etárias"""
+    if idade < 18:
+        return '14-17 anos'
+    elif idade < 25:
+        return '18-24 anos'
+    elif idade < 35:
+        return '25-34 anos'
+    elif idade < 45:
+        return '35-44 anos'
+    elif idade < 55:
+        return '45-54 anos'
+    elif idade < 65:
+        return '55-64 anos'
+    else:
+        return '65+ anos'
+
+# Aplicar merge e criar categoria de idade
 pnadc_vd4019_merge = pnadc_vd4019.merge(sexo, on='sexo', how='left') \
     .merge(raca, on='raca', how='left') \
     .merge(escolaridade, on='escolaridade', how='left')
-    
+
+# Converter idade para numérico e criar categorias
+pnadc_vd4019_merge['idade'] = pd.to_numeric(pnadc_vd4019_merge['idade'], errors='coerce')
+pnadc_vd4019_merge = pnadc_vd4019_merge.dropna(subset=['idade'])  # Remove idades inválidas
+pnadc_vd4019_merge['faixa_etaria'] = pnadc_vd4019_merge['idade'].apply(categorizar_idade)
+
 pnadc_vd4019_merge = pnadc_vd4019_merge.sort_values(['id_pessoa', 'trimestre', 'escolaridade'])
 
 pnadc_vd4019_merge = pnadc_vd4019_merge.groupby('id_pessoa').tail(1).reset_index(drop=True)
@@ -110,9 +133,10 @@ renda_por_pessoa = pnadc_vd4019_merge.groupby('id_pessoa').agg({
     'tipo_raca': 'first',
     'sexo': 'first',
     'tipo_sexo': 'first',
-    'sigla_uf': 'first'
+    'sigla_uf': 'first',
+    'idade': 'first',
+    'faixa_etaria': 'first'
 }).reset_index()
-
 
 # ================================================================================================================================================ #
 #                                                                                                                                                  # 

@@ -829,17 +829,18 @@ def criar_grafico_percentil(percentil, renda_usuario):
     
     return fig
 
-# Cria gráficos da "Comparação por categorias"
+# Cria gráficos da "Comparação por categorias" - ATUALIZADO COM IDADE
 def criar_grafico_comparativo_moderno(df):
     fig = make_subplots(
-        rows=4, cols=1,
-        subplot_titles=('Renda por Sexo', 'Renda por Escolaridade', 'Renda por UF', 'Renda por Raça'),
+        rows=5, cols=1,  # Aumentado para 5 linhas
+        subplot_titles=('Renda por Sexo', 'Renda por Escolaridade', 'Renda por UF', 'Renda por Raça', 'Renda por Faixa Etária'),
         specs=[[{"type": "bar"}],
                [{"type": "bar"}],
                [{"type": "bar"}],
-               [{"type": "bar"}]],
-        vertical_spacing=0.08,
-        row_heights=[0.20, 0.45, 0.90, 0.20] 
+               [{"type": "bar"}],
+               [{"type": "bar"}]],  # Adicionada quinta linha
+        vertical_spacing=0.06,  # Reduzido para acomodar o novo gráfico
+        row_heights=[0.15, 0.35, 0.70, 0.15, 0.25]  # Ajustados os heights
     )
     
     # Calcular dados
@@ -848,9 +849,20 @@ def criar_grafico_comparativo_moderno(df):
     renda_uf = df.groupby('sigla_uf')['renda'].mean().sort_values(ascending=True) if 'sigla_uf' in df.columns else pd.Series()
     renda_raca = df.groupby('tipo_raca')['renda'].mean().sort_values(ascending=True)
     
+    # NOVO: Calcular dados por faixa etária
+    if 'faixa_etaria' in df.columns:
+        # Definir ordem específica para faixas etárias
+        ordem_faixa_etaria = ['14-17 anos', '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos', '55-64 anos', '65+ anos']
+        renda_idade = df.groupby('faixa_etaria')['renda'].mean()
+        # Reordenar conforme a ordem definida
+        renda_idade = renda_idade.reindex([faixa for faixa in ordem_faixa_etaria if faixa in renda_idade.index])
+    else:
+        renda_idade = pd.Series()
+    
     # Encontrar o valor máximo para padronizar escala
     max_value = max(renda_sexo.max(), renda_escolaridade.max(), 
-                   renda_uf.max() if len(renda_uf) > 0 else 0, renda_raca.max())
+                   renda_uf.max() if len(renda_uf) > 0 else 0, renda_raca.max(),
+                   renda_idade.max() if len(renda_idade) > 0 else 0)  # Incluído idade no cálculo
     
     # Função para calcular margem baseada no comprimento do rótulo
     def calculo_margem_rotulos(labels, values, max_val):
@@ -897,15 +909,15 @@ def criar_grafico_comparativo_moderno(df):
     
         fig.add_trace(go.Bar(
             y=labels, 
-        x=values,
-        orientation='h',
-        marker_color='#3498db',
-        showlegend=False,
-        text=texts,
-        textposition=final_position,
-        textfont=dict(color=final_color, size=16, family="Poppins"), 
-        hoverinfo='skip'
-    ), row=row_num, col=1)
+            x=values,
+            orientation='h',
+            marker_color='#3498db',
+            showlegend=False,
+            text=texts,
+            textposition=final_position,
+            textfont=dict(color=final_color, size=16, family="Poppins"), 
+            hoverinfo='skip'
+        ), row=row_num, col=1)
     
         return final_position == 'outside'
     
@@ -919,13 +931,17 @@ def criar_grafico_comparativo_moderno(df):
     
     has_external_labels |= adiciona_trace(renda_raca.values, renda_raca.index, 4, "Raça")
     
+    # NOVO: Adicionar gráfico de faixa etária
+    if len(renda_idade) > 0:
+        has_external_labels |= adiciona_trace(renda_idade.values, renda_idade.index, 5, "Faixa Etária")
+    
     margin_multiplier = calculo_margem_rotulos(renda_escolaridade.index, renda_escolaridade.values, max_value)
     
     # Determinar range do eixo X baseado na necessidade real de espaço
     x_range = [0, 18000]
     
     fig.update_layout(
-        height=2500,
+        height=3000,  # Aumentado para acomodar o novo gráfico
         showlegend=False,
         plot_bgcolor='white',
         paper_bgcolor='white',
@@ -964,8 +980,8 @@ def criar_grafico_comparativo_moderno(df):
     
     return fig
 
-# Função para gerar texto descritivo
-def gerar_texto_resultado(percentil, sexo, raca, escolaridade, uf, renda_usuario):
+# Função para gerar texto descritivo - ATUALIZADA COM IDADE
+def gerar_texto_resultado(percentil, sexo, raca, escolaridade, uf, faixa_etaria, renda_usuario):
     partes = []
     
     if sexo != 'Todos':
@@ -990,6 +1006,10 @@ def gerar_texto_resultado(percentil, sexo, raca, escolaridade, uf, renda_usuario
     if uf != 'Todos':
         partes.append(f"do estado {uf}")
     
+    # NOVO: Adicionar faixa etária na descrição
+    if faixa_etaria != 'Todos':
+        partes.append(f"na faixa etária {faixa_etaria}")
+    
     if partes:
         descricao = ", ".join(partes)
         return f"Você ganha mais do que {percentil:.1f}% dos brasileiros {descricao}"
@@ -1003,7 +1023,7 @@ df = extracao_dados()
 st.markdown('<h1 class="main-header">Seu salário diante da realidade brasileira</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Descubra como sua renda se compara com o restante da população</p>', unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar - ATUALIZADA COM FILTRO DE IDADE
 st.sidebar.markdown("### Configure sua análise")
 
 # Input da renda
@@ -1027,14 +1047,14 @@ raca_selecionada = st.sidebar.selectbox("Raça/Cor", raca_valores)
 
 # Escolaridade com ordem hierárquica
 escolaridade_ordem = [
-                              'Pré-escola',
-                              'Alfabetizado',
-                              'Fundamental',
-                              'Médio',
-                              'Superior',
-                              'Pós-graduação',
-                              'Mestrado',
-                              'Doutorado'
+    'Pré-escola',
+    'Alfabetizado',
+    'Fundamental',
+    'Médio',
+    'Superior',
+    'Pós-graduação',
+    'Mestrado',
+    'Doutorado'
 ]
 
 escolaridade_opcoes = ['Todos']
@@ -1050,7 +1070,21 @@ if 'sigla_uf' in df.columns:
 else:
     uf_selecionada = 'Todos'
 
-# Botão de análise
+# NOVO: Filtro de Faixa Etária
+if 'faixa_etaria' in df.columns:
+    # Definir ordem específica para as faixas etárias
+    faixa_etaria_ordem = ['14-17 anos', '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos', '55-64 anos', '65+ anos']
+    
+    faixa_etaria_opcoes = ['Todos']
+    for faixa in faixa_etaria_ordem:
+        if faixa in df['faixa_etaria'].values:
+            faixa_etaria_opcoes.append(faixa)
+    
+    faixa_etaria_selecionada = st.sidebar.selectbox("Faixa Etária", faixa_etaria_opcoes)
+else:
+    faixa_etaria_selecionada = 'Todos'
+
+# Botão de análise - ATUALIZADO COM FILTRO DE IDADE
 if st.sidebar.button("Calcular", type="primary", use_container_width=True):
     # Aplicar filtros
     df_filtrado = df.copy()
@@ -1067,29 +1101,36 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
     if uf_selecionada != 'Todos' and 'sigla_uf' in df.columns:
         df_filtrado = df_filtrado[df_filtrado['sigla_uf'] == uf_selecionada]
     
+    # NOVO: Aplicar filtro de faixa etária
+    if faixa_etaria_selecionada != 'Todos' and 'faixa_etaria' in df.columns:
+        df_filtrado = df_filtrado[df_filtrado['faixa_etaria'] == faixa_etaria_selecionada]
+    
     if len(df_filtrado) == 0:
         st.error("Nenhum dado encontrado com os filtros selecionados. Tente outras combinações.")
         st.stop()
     
-    # Nota sobre filtros aplicados
-    if any(x != 'Todos' for x in [sexo_selecionado, raca_selecionada, escolaridade_selecionada, uf_selecionada]):
+    # Nota sobre filtros aplicados - ATUALIZADA COM IDADE
+    if any(x != 'Todos' for x in [sexo_selecionado, raca_selecionada, escolaridade_selecionada, uf_selecionada, faixa_etaria_selecionada]):
         filtros_ativos = []
         if sexo_selecionado != 'Todos': filtros_ativos.append(f"Sexo: {sexo_selecionado}")
         if raca_selecionada != 'Todos': filtros_ativos.append(f"Raça: {raca_selecionada}")
         if escolaridade_selecionada != 'Todos': filtros_ativos.append(f"Escolaridade: {escolaridade_selecionada}")
         if uf_selecionada != 'Todos': filtros_ativos.append(f"Estado: {uf_selecionada}")
+        if faixa_etaria_selecionada != 'Todos': filtros_ativos.append(f"Idade: {faixa_etaria_selecionada}")  # NOVO
         
         st.markdown(f"""
         <div class="filters-note">
-            <strong>Filtros aplicados:</strong> {' | '.join(filtros_ativos)} <strong>
+            <strong>Filtros aplicados:</strong> {' | '.join(filtros_ativos)}
         </div>
         """, unsafe_allow_html=True)
     
     # Calcular percentil
     percentil = calcular_percentil(renda_usuario, df_filtrado)
     
-    # Texto principal do resultado
-    texto_resultado = gerar_texto_resultado(percentil, sexo_selecionado, raca_selecionada, escolaridade_selecionada, uf_selecionada, renda_usuario)
+    # Texto principal do resultado - ATUALIZADO COM IDADE
+    texto_resultado = gerar_texto_resultado(percentil, sexo_selecionado, raca_selecionada, 
+                                          escolaridade_selecionada, uf_selecionada, 
+                                          faixa_etaria_selecionada, renda_usuario)
     
     st.markdown(f'<div class="result-text">{texto_resultado}</div>', unsafe_allow_html=True)
     
@@ -1173,6 +1214,9 @@ st.markdown("**Variável de renda analisada:** Utilizamos a variável VD4019, qu
 st.markdown("**Processamento:** Os dados foram processados utilizando Python com as bibliotecas pandas e basedosdados para acesso ao BigQuery. Para cada pessoa, consideramos apenas o último registro disponível no ano de 2024, garantindo que não haja duplicatas.")
 
 st.markdown("**Escolaridade:** Para a análise da variável 'Escolaridade' na comparação de renda, a nomenclatura original foi reestruturada e agrupada em categorias mais amplas. O objetivo é simplificar a visualização em gráficos e facilitar a compreensão dos diferentes estágios educacionais.")
+
+st.markdown("**Faixa Etária:** As idades foram agrupadas em faixas etárias para facilitar a análise comparativa: 14-17 anos, 18-24 anos, 25-34 anos, 35-44 anos, 45-54 anos, 55-64 anos e 65+ anos.")
+
 # Rodapé responsivo
 st.markdown("---")
 
