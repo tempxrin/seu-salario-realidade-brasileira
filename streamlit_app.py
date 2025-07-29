@@ -750,14 +750,102 @@ def extracao_dados():
         st.error("Arquivo nao encontrado")
         st.stop()
 
-# Função para calcular percentil
+# ===== FUNÇÕES CORRIGIDAS PARA USO COM PESOS AMOSTRAIS =====
+
+# Função corrigida para calcular percentil com pesos
 def calcular_percentil(renda_usuario, df_filtrado):
+    """Calcula percentil considerando pesos amostrais"""
     if len(df_filtrado) == 0:
         return 0
-    pessoas_com_renda_menor = len(df_filtrado[df_filtrado['renda'] < renda_usuario])
-    total_pessoas = len(df_filtrado)
-    percentil = (pessoas_com_renda_menor / total_pessoas) * 100
-    return min(percentil, 99.0) 
+    
+    # Verificar se a coluna peso_amostral existe
+    if 'peso_amostral' not in df_filtrado.columns:
+        # Fallback para cálculo sem pesos (como estava antes)
+        pessoas_com_renda_menor = len(df_filtrado[df_filtrado['renda'] < renda_usuario])
+        total_pessoas = len(df_filtrado)
+        percentil = (pessoas_com_renda_menor / total_pessoas) * 100
+        return min(percentil, 99.0)
+    
+    # Cálculo com pesos amostrais
+    peso_abaixo = df_filtrado[df_filtrado['renda'] < renda_usuario]['peso_amostral'].sum()
+    peso_total = df_filtrado['peso_amostral'].sum()
+    
+    if peso_total == 0:
+        return 0
+    
+    percentil = (peso_abaixo / peso_total) * 100
+    return min(percentil, 99.0)
+
+# Função para calcular percentis ponderados
+def calcular_percentis_ponderados(df, percentis=[0.90, 0.99]):
+    """Calcula percentis específicos considerando pesos amostrais"""
+    if 'peso_amostral' not in df.columns:
+        # Fallback sem pesos
+        return [df['renda'].quantile(p) for p in percentis]
+    
+    # Ordenar dados por renda
+    df_ordenado = df.sort_values('renda')
+    
+    # Calcular pesos cumulativos
+    pesos_cumulativos = df_ordenado['peso_amostral'].cumsum()
+    peso_total = df_ordenado['peso_amostral'].sum()
+    
+    resultados = []
+    for p in percentis:
+        limite = p * peso_total
+        # Encontrar o valor correspondente ao percentil
+        idx = np.searchsorted(pesos_cumulativos, limite, side='right')
+        if idx < len(df_ordenado):
+            resultados.append(df_ordenado.iloc[idx]['renda'])
+        else:
+            resultados.append(df_ordenado.iloc[-1]['renda'])
+    
+    return resultados
+
+# Função para calcular média ponderada
+def calcular_media_ponderada(df, coluna_valor='renda'):
+    """Calcula média considerando pesos amostrais"""
+    if 'peso_amostral' not in df.columns:
+        return df[coluna_valor].mean()
+    
+    return np.average(df[coluna_valor], weights=df['peso_amostral'])
+
+# Função para criar dados comparativos ponderados
+def criar_dados_comparativos_ponderados(df):
+    """Cria dados para gráficos considerando pesos amostrais"""
+    
+    def media_ponderada_por_grupo(df, coluna_grupo):
+        if 'peso_amostral' not in df.columns:
+            return df.groupby(coluna_grupo)['renda'].mean()
+        
+        resultado = {}
+        for grupo in df[coluna_grupo].unique():
+            if pd.notna(grupo):
+                df_grupo = df[df[coluna_grupo] == grupo]
+                resultado[grupo] = np.average(df_grupo['renda'], weights=df_grupo['peso_amostral'])
+        
+        return pd.Series(resultado)
+    
+    # Calcular médias ponderadas por categoria
+    renda_sexo = media_ponderada_por_grupo(df, 'tipo_sexo').sort_values(ascending=True)
+    renda_escolaridade = media_ponderada_por_grupo(df, 'tipo_escolaridade').sort_values(ascending=True)
+    renda_raca = media_ponderada_por_grupo(df, 'tipo_raca').sort_values(ascending=True)
+    
+    # Para UF e faixa etária (se existirem)
+    if 'sigla_uf' in df.columns:
+        renda_uf = media_ponderada_por_grupo(df, 'sigla_uf').sort_values(ascending=True)
+    else:
+        renda_uf = pd.Series()
+    
+    if 'faixa_etaria' in df.columns:
+        renda_idade = media_ponderada_por_grupo(df, 'faixa_etaria')
+        # Reordenar por idade
+        ordem_faixa_etaria = ['14-17 anos', '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos', '55-64 anos', '65+ anos']
+        renda_idade = renda_idade.reindex([faixa for faixa in ordem_faixa_etaria if faixa in renda_idade.index])
+    else:
+        renda_idade = pd.Series()
+    
+    return renda_sexo, renda_escolaridade, renda_uf, renda_raca, renda_idade
 
 # Função melhorada para determinar posição do texto
 def posicao_texto_cor(value, max_value, bar_width_threshold=0.20):
@@ -829,40 +917,27 @@ def criar_grafico_percentil(percentil, renda_usuario):
     
     return fig
 
-# Cria gráficos da "Comparação por categorias" - ATUALIZADO COM IDADE
+# Cria gráficos da "Comparação por categorias" - ATUALIZADO COM PESOS AMOSTRAIS
 def criar_grafico_comparativo_moderno(df):
     fig = make_subplots(
-        rows=5, cols=1,  # Aumentado para 5 linhas
+        rows=5, cols=1,
         subplot_titles=('Renda por Sexo', 'Renda por Escolaridade', 'Renda por UF', 'Renda por Raça', 'Renda por Faixa Etária'),
         specs=[[{"type": "bar"}],
                [{"type": "bar"}],
                [{"type": "bar"}],
                [{"type": "bar"}],
-               [{"type": "bar"}]],  # Adicionada quinta linha
-        vertical_spacing=0.06,  # Reduzido para acomodar o novo gráfico
-        row_heights=[0.15, 0.35, 0.70, 0.15, 0.25]  # Ajustados os heights
+               [{"type": "bar"}]],
+        vertical_spacing=0.06,
+        row_heights=[0.15, 0.35, 0.70, 0.15, 0.25]
     )
     
-    # Calcular dados
-    renda_sexo = df.groupby('tipo_sexo')['renda'].mean().sort_values(ascending=True)
-    renda_escolaridade = df.groupby('tipo_escolaridade')['renda'].mean().sort_values(ascending=True)
-    renda_uf = df.groupby('sigla_uf')['renda'].mean().sort_values(ascending=True) if 'sigla_uf' in df.columns else pd.Series()
-    renda_raca = df.groupby('tipo_raca')['renda'].mean().sort_values(ascending=True)
-    
-    # NOVO: Calcular dados por faixa etária
-    if 'faixa_etaria' in df.columns:
-        # Definir ordem específica para faixas etárias
-        ordem_faixa_etaria = ['14-17 anos', '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos', '55-64 anos', '65+ anos']
-        renda_idade = df.groupby('faixa_etaria')['renda'].mean()
-        # Reordenar conforme a ordem definida
-        renda_idade = renda_idade.reindex([faixa for faixa in ordem_faixa_etaria if faixa in renda_idade.index])
-    else:
-        renda_idade = pd.Series()
+    # Usar dados ponderados
+    renda_sexo, renda_escolaridade, renda_uf, renda_raca, renda_idade = criar_dados_comparativos_ponderados(df)
     
     # Encontrar o valor máximo para padronizar escala
     max_value = max(renda_sexo.max(), renda_escolaridade.max(), 
                    renda_uf.max() if len(renda_uf) > 0 else 0, renda_raca.max(),
-                   renda_idade.max() if len(renda_idade) > 0 else 0)  # Incluído idade no cálculo
+                   renda_idade.max() if len(renda_idade) > 0 else 0)
     
     # Função para calcular margem baseada no comprimento do rótulo
     def calculo_margem_rotulos(labels, values, max_val):
@@ -931,7 +1006,7 @@ def criar_grafico_comparativo_moderno(df):
     
     has_external_labels |= adiciona_trace(renda_raca.values, renda_raca.index, 4, "Raça")
     
-    # NOVO: Adicionar gráfico de faixa etária
+    # Adicionar gráfico de faixa etária
     if len(renda_idade) > 0:
         has_external_labels |= adiciona_trace(renda_idade.values, renda_idade.index, 5, "Faixa Etária")
     
@@ -941,7 +1016,7 @@ def criar_grafico_comparativo_moderno(df):
     x_range = [0, 18000]
     
     fig.update_layout(
-        height=3000,  # Aumentado para acomodar o novo gráfico
+        height=3000,
         showlegend=False,
         plot_bgcolor='white',
         paper_bgcolor='white',
@@ -980,7 +1055,7 @@ def criar_grafico_comparativo_moderno(df):
     
     return fig
 
-# Função para gerar texto descritivo - ATUALIZADA COM IDADE
+# Função para gerar texto descritivo
 def gerar_texto_resultado(percentil, sexo, raca, escolaridade, uf, faixa_etaria, renda_usuario):
     partes = []
     
@@ -1006,7 +1081,6 @@ def gerar_texto_resultado(percentil, sexo, raca, escolaridade, uf, faixa_etaria,
     if uf != 'Todos':
         partes.append(f"do estado {uf}")
     
-    # NOVO: Adicionar faixa etária na descrição
     if faixa_etaria != 'Todos':
         partes.append(f"na faixa etária {faixa_etaria}")
     
@@ -1023,7 +1097,7 @@ df = extracao_dados()
 st.markdown('<h1 class="main-header">Seu salário diante da realidade brasileira</h1>', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Descubra como sua renda se compara com o restante da população</p>', unsafe_allow_html=True)
 
-# Sidebar - ATUALIZADA COM FILTRO DE IDADE
+# Sidebar
 st.sidebar.markdown("### Configure sua análise")
 
 # Input da renda
@@ -1070,9 +1144,8 @@ if 'sigla_uf' in df.columns:
 else:
     uf_selecionada = 'Todos'
 
-# NOVO: Filtro de Faixa Etária
+# Filtro de Faixa Etária
 if 'faixa_etaria' in df.columns:
-    # Definir ordem específica para as faixas etárias
     faixa_etaria_ordem = ['14-17 anos', '18-24 anos', '25-34 anos', '35-44 anos', '45-54 anos', '55-64 anos', '65+ anos']
     
     faixa_etaria_opcoes = ['Todos']
@@ -1084,7 +1157,7 @@ if 'faixa_etaria' in df.columns:
 else:
     faixa_etaria_selecionada = 'Todos'
 
-# Botão de análise - ATUALIZADO COM FILTRO DE IDADE
+# Botão de análise
 if st.sidebar.button("Calcular", type="primary", use_container_width=True):
     # Aplicar filtros
     df_filtrado = df.copy()
@@ -1101,7 +1174,6 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
     if uf_selecionada != 'Todos' and 'sigla_uf' in df.columns:
         df_filtrado = df_filtrado[df_filtrado['sigla_uf'] == uf_selecionada]
     
-    # NOVO: Aplicar filtro de faixa etária
     if faixa_etaria_selecionada != 'Todos' and 'faixa_etaria' in df.columns:
         df_filtrado = df_filtrado[df_filtrado['faixa_etaria'] == faixa_etaria_selecionada]
     
@@ -1109,14 +1181,14 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
         st.error("Nenhum dado encontrado com os filtros selecionados. Tente outras combinações.")
         st.stop()
     
-    # Nota sobre filtros aplicados - ATUALIZADA COM IDADE
+    # Nota sobre filtros aplicados
     if any(x != 'Todos' for x in [sexo_selecionado, raca_selecionada, escolaridade_selecionada, uf_selecionada, faixa_etaria_selecionada]):
         filtros_ativos = []
         if sexo_selecionado != 'Todos': filtros_ativos.append(f"Sexo: {sexo_selecionado}")
         if raca_selecionada != 'Todos': filtros_ativos.append(f"Raça: {raca_selecionada}")
         if escolaridade_selecionada != 'Todos': filtros_ativos.append(f"Escolaridade: {escolaridade_selecionada}")
         if uf_selecionada != 'Todos': filtros_ativos.append(f"Estado: {uf_selecionada}")
-        if faixa_etaria_selecionada != 'Todos': filtros_ativos.append(f"Idade: {faixa_etaria_selecionada}")  # NOVO
+        if faixa_etaria_selecionada != 'Todos': filtros_ativos.append(f"Idade: {faixa_etaria_selecionada}")
         
         st.markdown(f"""
         <div class="filters-note">
@@ -1124,33 +1196,37 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
         </div>
         """, unsafe_allow_html=True)
     
-    # Calcular percentil
+    # Calcular percentil com pesos amostrais
     percentil = calcular_percentil(renda_usuario, df_filtrado)
     
-    # Texto principal do resultado - ATUALIZADO COM IDADE
+    # Texto principal do resultado
     texto_resultado = gerar_texto_resultado(percentil, sexo_selecionado, raca_selecionada, 
                                           escolaridade_selecionada, uf_selecionada, 
                                           faixa_etaria_selecionada, renda_usuario)
     
     st.markdown(f'<div class="result-text">{texto_resultado}</div>', unsafe_allow_html=True)
     
-    # Gráfico de barra de percentil - RESPONSIVO
+    # Gráfico de barra de percentil
     fig_percentil = criar_grafico_percentil(percentil, renda_usuario)
     st.plotly_chart(fig_percentil, use_container_width=True, config={'displayModeBar': False})
     
-    # Cards com métricas - RESPONSIVO
+    # Cards com métricas - CORRIGIDOS COM PESOS AMOSTRAIS
     col1, col2, col3, col4 = st.columns(4)
+    
+    # Calcular métricas com pesos
+    media_ponderada = calcular_media_ponderada(df_filtrado)
+    p90, p99 = calcular_percentis_ponderados(df_filtrado, [0.90, 0.99])
+    diferenca_media = ((renda_usuario / media_ponderada) - 1) * 100
     
     with col1:
         st.markdown(f"""
         <div class="metric-card">
             <h3>Renda Média</h3>
-            <h2>R$ {df_filtrado['renda'].mean():,.0f}</h2>
+            <h2>R$ {media_ponderada:,.0f}</h2>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        diferenca_media = ((renda_usuario / df_filtrado['renda'].mean()) - 1) * 100
         sinal = "+" if diferenca_media > 0 else ""
         st.markdown(f"""
         <div class="metric-card">
@@ -1163,7 +1239,7 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
         st.markdown(f"""
         <div class="metric-card">
             <h3>10% mais rico ganha acima de</h3>
-            <h2>R$ {df_filtrado['renda'].quantile(0.90):,.0f}</h2>
+            <h2>R$ {p90:,.0f}</h2>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1171,16 +1247,16 @@ if st.sidebar.button("Calcular", type="primary", use_container_width=True):
         st.markdown(f"""
         <div class="metric-card">
             <h3>1% mais rico ganha acima de</h3>
-            <h2>R$ {df_filtrado['renda'].quantile(0.99):,.0f}</h2>
+            <h2>R$ {p99:,.0f}</h2>
         </div>
         """, unsafe_allow_html=True)
                     
     st.markdown("---")
     st.markdown("## Comparação por categorias")
     
-    # Gráfico comparativo responsivo
+    # Gráfico comparativo com pesos amostrais
     fig_comp = criar_grafico_comparativo_moderno(df)
-    col1, col2, col3 = st.columns([0.5, 3, 0.5])  # Gráfico ocupa 3/4 da largura
+    col1, col2, col3 = st.columns([0.5, 3, 0.5])
     with col2:
         st.plotly_chart(fig_comp, use_container_width=True, config={'displayModeBar': False})
 
@@ -1188,20 +1264,24 @@ else:
     # Tela inicial (antes de calcular)
     st.info("Configure sua renda e filtros na barra lateral e clique em 'Calcular'")
     
-    # Estatísticas gerais - RESPONSIVO
+    # Estatísticas gerais com pesos amostrais
     st.markdown("---")
     st.markdown("## Dados gerais da população brasileira")
     
     col1, col2, col3 = st.columns(3)
     
+    # Calcular estatísticas gerais com pesos
+    media_nacional = calcular_media_ponderada(df)
+    p90_nacional, p99_nacional = calcular_percentis_ponderados(df, [0.90, 0.99])
+    
     with col1:
-        st.metric("Renda Média Nacional", f"R$ {df['renda'].mean():,.0f}")
+        st.metric("Renda Média Nacional", f"R$ {media_nacional:,.0f}")
     
     with col2:
-        st.metric("10% mais rico ganha acima de", f"R$ {df['renda'].quantile(0.90):,.0f}")
+        st.metric("10% mais rico ganha acima de", f"R$ {p90_nacional:,.0f}")
 
     with col3:
-        st.metric("1% mais rico ganha acima de", f"R$ {df['renda'].quantile(0.99):,.0f}")
+        st.metric("1% mais rico ganha acima de", f"R$ {p99_nacional:,.0f}")
 
 # Metodologia
 st.markdown("---")
@@ -1210,6 +1290,8 @@ st.markdown("## Metodologia")
 st.markdown("**Fonte dos dados:** Os dados utilizados nesta calculadora são provenientes da Pesquisa Nacional por Amostra de Domicílios Contínua (PNAD Contínua) do IBGE, referentes ao ano de 2024.")
 
 st.markdown("**Variável de renda analisada:** Utilizamos a variável VD4019, que representa o rendimento mensal habitual de todos os trabalhos para pessoas de 14 anos ou mais de idade (considerando apenas aqueles que receberam em dinheiro, produtos ou mercadorias).")
+
+st.markdown("**Pesos amostrais:** Para garantir representatividade populacional, todos os cálculos consideram os pesos amostrais da PNAD Contínua (variável V1028), que ajustam a amostra para refletir a composição real da população brasileira.")
 
 st.markdown("**Processamento:** Os dados foram processados utilizando Python com as bibliotecas pandas e basedosdados para acesso ao BigQuery. Para cada pessoa, consideramos apenas o último registro disponível no ano de 2024, garantindo que não haja duplicatas.")
 

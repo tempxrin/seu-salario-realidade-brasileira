@@ -47,7 +47,8 @@ query = """
     dados.V2007 AS sexo,
     dados.V2010 AS raca,
     dados.V2009 AS idade,
-    dados.V3009A AS escolaridade
+    dados.V3009A AS escolaridade,
+    dados.V1028 AS peso_amostral
 FROM `basedosdados.br_ibge_pnadc.microdados` AS dados
 WHERE (dados.ano = 2024 AND dados.VD4019 > 0 AND dados.V2010 <> '9' AND dados.V3009A <> 'None')
 """
@@ -111,22 +112,30 @@ def categorizar_idade(idade):
     else:
         return '65+ anos'
 
-# Aplicar merge e criar categoria de idade
+def calcular_posicao_percentil(valor_renda, dados, coluna_valor='renda', coluna_peso='peso_amostral'):
+    """
+    Calcula em que percentil uma determinada renda se encontra (de forma ponderada)
+    """
+    peso_abaixo = dados[dados[coluna_valor] < valor_renda][coluna_peso].sum()
+    peso_total = dados[coluna_peso].sum()
+    percentil = (peso_abaixo / peso_total) * 100
+    return min(percentil, 99)
+
 pnadc_vd4019_merge = pnadc_vd4019.merge(sexo, on='sexo', how='left') \
     .merge(raca, on='raca', how='left') \
     .merge(escolaridade, on='escolaridade', how='left')
 
-# Converter idade para numérico e criar categorias
 pnadc_vd4019_merge['idade'] = pd.to_numeric(pnadc_vd4019_merge['idade'], errors='coerce')
-pnadc_vd4019_merge = pnadc_vd4019_merge.dropna(subset=['idade'])  # Remove idades inválidas
+pnadc_vd4019_merge['peso_amostral'] = pd.to_numeric(pnadc_vd4019_merge['peso_amostral'], errors='coerce')
+pnadc_vd4019_merge = pnadc_vd4019_merge.dropna(subset=['idade', 'peso_amostral'])
 pnadc_vd4019_merge['faixa_etaria'] = pnadc_vd4019_merge['idade'].apply(categorizar_idade)
 
 pnadc_vd4019_merge = pnadc_vd4019_merge.sort_values(['id_pessoa', 'trimestre', 'escolaridade'])
-
 pnadc_vd4019_merge = pnadc_vd4019_merge.groupby('id_pessoa').tail(1).reset_index(drop=True)
 
 renda_por_pessoa = pnadc_vd4019_merge.groupby('id_pessoa').agg({
     'renda': 'sum',
+    'peso_amostral': 'first',
     'escolaridade': 'first',
     'tipo_escolaridade': 'first',
     'raca': 'first',
